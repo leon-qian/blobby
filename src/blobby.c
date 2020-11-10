@@ -3,40 +3,32 @@
 // COMP1521 20T3 Assignment 2
 // Written by <YOUR NAME HERE>
 
+#include <assert.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdint.h>
-#include <assert.h>
-#include <unistd.h>
-#include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 // the first byte of every blobette has this value
-#define BLOBETTE_MAGIC_NUMBER          0x42
+#define BLOBETTE_MAGIC_NUMBER 0x42
 
 // number of bytes in fixed-length blobette fields
-#define BLOBETTE_MAGIC_NUMBER_BYTES    1
-#define BLOBETTE_MODE_LENGTH_BYTES     3
+#define BLOBETTE_MAGIC_NUMBER_BYTES 1
+#define BLOBETTE_MODE_LENGTH_BYTES 3
 #define BLOBETTE_PATHNAME_LENGTH_BYTES 2
-#define BLOBETTE_CONTENT_LENGTH_BYTES  6
-#define BLOBETTE_HASH_BYTES            1
+#define BLOBETTE_CONTENT_LENGTH_BYTES 6
+#define BLOBETTE_HASH_BYTES 1
 
 // maximum number of bytes in variable-length blobette fields
-#define BLOBETTE_MAX_PATHNAME_LENGTH   65535
-#define BLOBETTE_MAX_CONTENT_LENGTH    281474976710655
-
+#define BLOBETTE_MAX_PATHNAME_LENGTH 65535
+#define BLOBETTE_MAX_CONTENT_LENGTH 281474976710655
 
 // ADD YOUR #defines HERE
 
-
-typedef enum action {
-    a_invalid,
-    a_list,
-    a_extract,
-    a_create
-} action_t;
-
+typedef enum action { a_invalid, a_list, a_extract, a_create } action_t;
 
 void usage(char *myname);
 action_t process_arguments(int argc, char *argv[], char **blob_pathname,
@@ -48,9 +40,7 @@ void create_blob(char *blob_pathname, char *pathnames[], int compress_blob);
 
 uint8_t blobby_hash(uint8_t hash, uint8_t byte);
 
-
 // ADD YOUR FUNCTION PROTOTYPES HERE
-
 
 // YOU SHOULD NOT NEED TO CHANGE main, usage or process_arguments
 
@@ -62,20 +52,20 @@ int main(int argc, char *argv[]) {
                                         &compress_blob);
 
     switch (action) {
-    case a_list:
-        list_blob(blob_pathname);
-        break;
+        case a_list:
+            list_blob(blob_pathname);
+            break;
 
-    case a_extract:
-        extract_blob(blob_pathname);
-        break;
+        case a_extract:
+            extract_blob(blob_pathname);
+            break;
 
-    case a_create:
-        create_blob(blob_pathname, pathnames, compress_blob);
-        break;
+        case a_create:
+            create_blob(blob_pathname, pathnames, compress_blob);
+            break;
 
-    default:
-        usage(argv[0]);
+        default:
+            usage(argv[0]);
     }
 
     return 0;
@@ -108,27 +98,27 @@ action_t process_arguments(int argc, char *argv[], char **blob_pathname,
     int opt;
     while ((opt = getopt(argc, argv, ":l:c:x:z")) != -1) {
         switch (opt) {
-        case 'c':
-            create_blob_flag++;
-            *blob_pathname = optarg;
-            break;
+            case 'c':
+                create_blob_flag++;
+                *blob_pathname = optarg;
+                break;
 
-        case 'x':
-            extract_blob_flag++;
-            *blob_pathname = optarg;
-            break;
+            case 'x':
+                extract_blob_flag++;
+                *blob_pathname = optarg;
+                break;
 
-        case 'l':
-            list_blob_flag++;
-            *blob_pathname = optarg;
-            break;
+            case 'l':
+                list_blob_flag++;
+                *blob_pathname = optarg;
+                break;
 
-        case 'z':
-            (*compress_blob)++;
-            break;
+            case 'z':
+                (*compress_blob)++;
+                break;
 
-        default:
-            return a_invalid;
+            default:
+                return a_invalid;
         }
     }
 
@@ -148,11 +138,9 @@ action_t process_arguments(int argc, char *argv[], char **blob_pathname,
     return a_invalid;
 }
 
-
 // list the contents of blob_pathname
 
 void list_blob(char *blob_pathname) {
-
     // REPLACE WITH YOUR CODE FOR -l
 
     printf("list_blob called to list '%s'\n", blob_pathname);
@@ -161,11 +149,9 @@ void list_blob(char *blob_pathname) {
     // printf("%06lo %5lu %s\n", mode, content_length, pathname);
 }
 
-
 // extract the contents of blob_pathname
 
 void extract_blob(char *blob_pathname) {
-
     // REPLACE WITH YOUR CODE FOR -x
 
     printf("extract_blob called to extract '%s'\n", blob_pathname);
@@ -175,7 +161,6 @@ void extract_blob(char *blob_pathname) {
 // compress with xz if compress_blob non-zero (subset 4)
 
 void create_blob(char *blob_pathname, char *pathnames[], int compress_blob) {
-
     // REPLACE WITH YOUR CODE FOR -c
 
     printf("create_blob called to create %s blob '%s' containing:\n",
@@ -184,12 +169,9 @@ void create_blob(char *blob_pathname, char *pathnames[], int compress_blob) {
     for (int p = 0; pathnames[p]; p++) {
         printf("%s\n", pathnames[p]);
     }
-
 }
 
-
 // ADD YOUR FUNCTIONS HERE
-
 
 // YOU SHOULD NOT CHANGE CODE BELOW HERE
 
@@ -215,8 +197,7 @@ const uint8_t blobby_hash_table[256] = {
     169, 85,  66,  104, 80,  71,  230, 152, 225, 34,  248, 198, 63,  168, 179,
     141, 137, 5,   19,  79,  232, 128, 202, 46,  70,  37,  209, 217, 123, 27,
     177, 25,  56,  65,  229, 36,  197, 234, 108, 35,  151, 238, 200, 224, 99,
-    190
-};
+    190};
 
 // Given the current hash value and a byte
 // blobby_hash returns the new hash value
