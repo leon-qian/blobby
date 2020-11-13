@@ -49,6 +49,9 @@ uint8_t blobby_hash(uint8_t hash, uint8_t byte);
 
 // ADD YOUR FUNCTION PROTOTYPES HERE
 
+/**
+ * Create a new blobette.
+ */
 blobette_t new_blobette(mode_t file_mode, uint16_t pathname_length,
                         uint64_t content_length, uint8_t hash_byte) {
     return (blobette_t){.file_mode = file_mode,
@@ -56,6 +59,56 @@ blobette_t new_blobette(mode_t file_mode, uint16_t pathname_length,
                         .content_length = content_length,
                         .hash_byte = hash_byte};
 }
+
+/**
+ * Encode a blobette and write binary data to file stream.
+ *
+ * Return 0 on success,
+ *        1 on failure.
+ */
+int encode_blobette(FILE *stream, blobette_t blobette) {}
+
+/**
+ * Read binary data from file stream and decode a blobette.
+ *
+ * Return 0 on success,
+ *        1 on failure.
+ */
+int decode_blobette(blobette_t *blobette, FILE *stream) {}
+
+/**
+ * Pack an array of blobettes into a blob file.
+ *
+ * Return 0 on success,
+ *        1 on failure.
+ *
+ * On failure, the blob file will contain all the packed blobettes up to the
+ * point of failure. Note that this file will be an invalid blob file.
+ */
+int pack_blob(blobette_t *blobettes, int n_blobettes, char *blob_pathname) {}
+
+/**
+ * Unpack a blob file into an array of blobettes.
+ *
+ * Return 0 on success,
+ *        1 on failure.
+ *
+ * On failure, the array of blobettes will contain all the unpacked blobettes up
+ * to the point of failure. Note that the last blobette in the array will be an
+ * invalid blobette.
+ */
+int unpack_blob(char *blob_pathname, blobette_t **blobettes, int *n_blobettes) {
+}
+
+/**
+ * Read the next byte in the stream and update the hash.
+ *
+ * Return 0 on success,
+ *        1 on failure.
+ *
+ * Note: Reaching EOF is considered a failure.
+ */
+int process_next_byte(FILE *stream, uint8_t *byte, uint8_t *hash) {}
 
 // YOU SHOULD NOT NEED TO CHANGE main, usage or process_arguments
 
@@ -153,8 +206,13 @@ action_t process_arguments(int argc, char *argv[], char **blob_pathname,
     return a_invalid;
 }
 
-// list the contents of blob_pathname
-
+/**
+ * list the contents of blob_pathname
+ * This function is called when the -l flag is set.
+ *
+ * file -> array of blobettes
+ * print each blobette
+ */
 void list_blob(char *blob_pathname) {
     // REPLACE WITH YOUR CODE FOR -l
 
@@ -246,8 +304,14 @@ void list_blob(char *blob_pathname) {
     // END: Draft
 }
 
-// extract the contents of blob_pathname
-
+/**
+ * extract the contents of blob_pathname
+ * This function is called when the -x flag is set.
+ *
+ * file -> array of blobettes
+ * print each blobette name
+ * blobette -> file
+ */
 void extract_blob(char *blob_pathname) {
     // REPLACE WITH YOUR CODE FOR -x
 
@@ -256,7 +320,14 @@ void extract_blob(char *blob_pathname) {
 
 // create blob_pathname from NULL-terminated array pathnames
 // compress with xz if compress_blob non-zero (subset 4)
-
+/**
+ * This function is called when the -c flag is set.
+ * This function compresses blob if -z flag is set.
+ *
+ * files -> array of blobettes
+ * print each blobette name
+ * blobettes -> blob
+ */
 void create_blob(char *blob_pathname, char *pathnames[], int compress_blob) {
     // REPLACE WITH YOUR CODE FOR -c
 
