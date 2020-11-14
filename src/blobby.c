@@ -314,20 +314,13 @@ action_t process_arguments(int argc, char *argv[], char **blob_pathname,
 }
 
 /**
- * list the contents of blob_pathname
+ * List the contents of the blob at the given path.
  * This function is called when the -l flag is set.
  *
- * file -> array of blobettes
- * print each blobette
+ * blob_pathname : The path to the blob.
  */
 void list_blob(char *blob_pathname) {
-    // REPLACE WITH YOUR CODE FOR -l
-
-    // printf("list_blob called to list '%s'\n", blob_pathname);
-
-    // HINT: you'll need a printf like:
-    // printf("%06lo %5lu %s\n", mode, content_length, pathname);
-
+    // Unpack blob at depth 0, i.e. without extracting the contents.
     unpack_blob(blob_pathname, 0);
 }
 
