@@ -27,15 +27,16 @@
 #define BLOBETTE_MAX_CONTENT_LENGTH 281474976710655
 
 // ADD YOUR #defines HERE
+#define BLOBETTE_HASH_INITIAL_VALUE 0
 
 typedef enum action { a_invalid, a_list, a_extract, a_create } action_t;
 
-typedef struct blobette {
-    mode_t file_mode;
-    uint16_t pathname_length;
-    uint64_t content_length;
-    uint8_t hash_byte;
-} blobette_t;
+// typedef struct blobette {
+//     mode_t file_mode;
+//     uint16_t pathname_length;
+//     uint64_t content_length;
+//     uint8_t hash_byte;
+// } blobette_t;
 
 void usage(char *myname);
 action_t process_arguments(int argc, char *argv[], char **blob_pathname,
@@ -52,13 +53,13 @@ uint8_t blobby_hash(uint8_t hash, uint8_t byte);
 /**
  * Create a new blobette.
  */
-blobette_t new_blobette(mode_t file_mode, uint16_t pathname_length,
-                        uint64_t content_length, uint8_t hash_byte) {
-    return (blobette_t){.file_mode = file_mode,
-                        .pathname_length = pathname_length,
-                        .content_length = content_length,
-                        .hash_byte = hash_byte};
-}
+// blobette_t new_blobette(mode_t file_mode, uint16_t pathname_length,
+//                         uint64_t content_length, uint8_t hash_byte) {
+//     return (blobette_t){.file_mode = file_mode,
+//                         .pathname_length = pathname_length,
+//                         .content_length = content_length,
+//                         .hash_byte = hash_byte};
+// }
 
 /**
  * Encode a blobette and write binary data to file stream.
@@ -66,7 +67,7 @@ blobette_t new_blobette(mode_t file_mode, uint16_t pathname_length,
  * Return 0 on success,
  *        1 on failure.
  */
-int encode_blobette(FILE *stream, blobette_t blobette) {}
+// int encode_blobette(FILE *stream, blobette_t blobette) {}
 
 /**
  * Read binary data from file stream and decode a blobette.
@@ -74,7 +75,29 @@ int encode_blobette(FILE *stream, blobette_t blobette) {}
  * Return 0 on success,
  *        1 on failure.
  */
-int decode_blobette(blobette_t *blobette, FILE *stream) {}
+// int decode_blobette(blobette_t *blobette, FILE *stream) {}
+
+/**
+ * Read the next byte in the stream and update the hash.
+ *
+ * Return 0 on success,
+ *        1 on failure.
+ *
+ * Note: Reaching EOF is considered a failure.
+ */
+int process_next_byte(FILE *stream, uint8_t *byte, uint8_t *hash) {
+    int temp = fgetc(stream);
+    if (temp == EOF) {
+        return 1;
+    }
+
+    *byte = temp;
+    // if (hash) printf("hash: %02x\n", *hash);
+    // printf("byte: %02x\n", *byte);
+    if (hash) *hash = blobby_hash(*hash, *byte);
+    // if (hash) printf("\tblobby_hash: %02x\n\n", *hash);
+    return 0;
+}
 
 /**
  * Pack an array of blobettes into a blob file.
@@ -85,7 +108,7 @@ int decode_blobette(blobette_t *blobette, FILE *stream) {}
  * On failure, the blob file will contain all the packed blobettes up to the
  * point of failure. Note that this file will be an invalid blob file.
  */
-int pack_blob(blobette_t *blobettes, int n_blobettes, char *blob_pathname) {}
+// int pack_blob(blobette_t *blobettes, int n_blobettes, char *blob_pathname) {}
 
 /**
  * Unpack a blob file into an array of blobettes.
@@ -97,18 +120,102 @@ int pack_blob(blobette_t *blobettes, int n_blobettes, char *blob_pathname) {}
  * to the point of failure. Note that the last blobette in the array will be an
  * invalid blobette.
  */
-int unpack_blob(char *blob_pathname, blobette_t **blobettes, int *n_blobettes) {
-}
+void unpack_blob(char *blob_pathname, int depth) {
+    // Open the blob.
+    FILE *blob_stream = fopen(blob_pathname, "r");
+    if (!blob_stream) {
+        perror(blob_pathname);
+        exit(EXIT_FAILURE);
+    }
 
-/**
- * Read the next byte in the stream and update the hash.
- *
- * Return 0 on success,
- *        1 on failure.
- *
- * Note: Reaching EOF is considered a failure.
- */
-int process_next_byte(FILE *stream, uint8_t *byte, uint8_t *hash) {}
+    uint8_t hash = BLOBETTE_HASH_INITIAL_VALUE;
+    uint8_t byte;
+    while (!process_next_byte(blob_stream, &byte, &hash)) {
+        // check magic number
+        if (byte != BLOBETTE_MAGIC_NUMBER) {
+            fprintf(stderr, "ERROR: Magic byte of blobette incorrect\n");
+            exit(EXIT_FAILURE);
+        }
+
+        // get mode
+        mode_t mode = 0;
+        for (int i = 0; i < BLOBETTE_MODE_LENGTH_BYTES; ++i) {
+            if (process_next_byte(blob_stream, &byte, &hash)) {
+                fprintf(stderr, "ERROR: Incomplete mode\n");
+                exit(EXIT_FAILURE);
+            }
+
+            mode <<= 8;
+            mode |= byte;
+        }
+
+        // get pathname length
+        uint16_t pathname_length = 0;
+        for (int i = 0; i < BLOBETTE_PATHNAME_LENGTH_BYTES; ++i) {
+            if (process_next_byte(blob_stream, &byte, &hash)) {
+                fprintf(stderr, "ERROR: Incomplete pathname length\n");
+                exit(EXIT_FAILURE);
+            }
+
+            pathname_length <<= 8;
+            pathname_length |= byte;
+        }
+
+        // get content length
+        uint64_t content_length = 0;
+        for (int i = 0; i < BLOBETTE_CONTENT_LENGTH_BYTES; ++i) {
+            if (process_next_byte(blob_stream, &byte, &hash)) {
+                fprintf(stderr, "ERROR: Incomplete content length\n");
+                exit(EXIT_FAILURE);
+            }
+
+            content_length <<= 8;
+            content_length |= byte;
+        }
+
+        // get pathname bytes
+        uint8_t *pathname = malloc(sizeof(uint8_t) * (pathname_length + 1));
+        for (int i = 0; i < pathname_length; ++i) {
+            if (process_next_byte(blob_stream, &byte, &hash)) {
+                free(pathname);
+                fprintf(stderr, "ERROR: Incomplete pathname\n");
+                exit(EXIT_FAILURE);
+            }
+
+            pathname[i] = byte;
+        }
+        pathname[pathname_length] = '\0';
+
+        if (!depth) {
+            printf("%06o %5lu %s\n", mode, content_length, pathname);
+            free(pathname);
+            if (fseek(blob_stream, content_length + BLOBETTE_HASH_BYTES,
+                      SEEK_CUR)) {
+                perror(blob_pathname);
+                exit(EXIT_FAILURE);
+            }
+        } else {
+            // create files and write contents
+
+            // get hash
+            if (process_next_byte(blob_stream, &byte, NULL)) {
+                fprintf(stderr, "ERROR: Hash of blobette not found\n");
+                exit(EXIT_FAILURE);
+            }
+
+            // check hash
+            if (byte != hash) {
+                fprintf(stderr, "ERROR: Hash of blobette incorrect\n");
+                exit(EXIT_FAILURE);
+            }
+        }
+
+        // reset hash
+        hash = BLOBETTE_HASH_INITIAL_VALUE;
+    }
+
+    fclose(blob_stream);
+}
 
 // YOU SHOULD NOT NEED TO CHANGE main, usage or process_arguments
 
@@ -216,92 +323,12 @@ action_t process_arguments(int argc, char *argv[], char **blob_pathname,
 void list_blob(char *blob_pathname) {
     // REPLACE WITH YOUR CODE FOR -l
 
-    printf("list_blob called to list '%s'\n", blob_pathname);
+    // printf("list_blob called to list '%s'\n", blob_pathname);
 
     // HINT: you'll need a printf like:
     // printf("%06lo %5lu %s\n", mode, content_length, pathname);
 
-    // BEGIN: Draft
-
-    FILE *blob_stream = fopen(blob_pathname, "r");
-    blobette_t *blobettes = malloc(sizeof(blobette_t) * 1000);
-    assert(blobettes);
-    int n_blobettes = 0;
-
-    int blob_byte;
-    while (1) {
-        // get magic number
-        blob_byte = fgetc(blob_stream);
-        if (blob_byte == EOF) break;
-        assert(blob_byte == BLOBETTE_MAGIC_NUMBER);
-
-        // get file mode
-        mode_t file_mode = 0;
-        for (int i = 0; i < BLOBETTE_MODE_LENGTH_BYTES; ++i) {
-            blob_byte = fgetc(blob_stream);
-            assert(blob_byte != EOF);
-
-            file_mode <<= 8;
-            file_mode |= blob_byte;
-        }
-        printf("%06lo ", (unsigned long)file_mode);
-
-        // get pathname length
-        uint16_t pathname_length = 0;
-        for (int i = 0; i < BLOBETTE_PATHNAME_LENGTH_BYTES; ++i) {
-            blob_byte = fgetc(blob_stream);
-            assert(blob_byte != EOF);
-
-            pathname_length <<= 8;
-            pathname_length |= blob_byte;
-        }
-
-        // get content length
-        uint64_t content_length = 0;
-        for (int i = 0; i < BLOBETTE_CONTENT_LENGTH_BYTES; ++i) {
-            blob_byte = fgetc(blob_stream);
-            assert(blob_byte != EOF);
-
-            content_length <<= 8;
-            content_length |= blob_byte;
-        }
-        printf("%5lu ", content_length);
-
-        // get pathname bytes
-        uint8_t *pathname = malloc(sizeof(uint8_t) * (pathname_length + 1));
-        for (int i = 0; i < pathname_length; ++i) {
-            blob_byte = fgetc(blob_stream);
-            assert(blob_byte != EOF);
-
-            pathname[i] = blob_byte;
-            pathname[i + 1] = '\0';
-        }
-        printf("%s\n", pathname);
-        free(pathname);
-
-        // skip the content bytes
-        assert(!fseek(blob_stream, content_length, SEEK_CUR));
-
-        // get hash
-        blob_byte = fgetc(blob_stream);
-        assert(blob_byte != EOF);
-        uint8_t hash_byte = blob_byte;
-
-        // construct internal blobette representation
-        blobettes[n_blobettes++] =
-            new_blobette(file_mode, pathname_length, content_length, hash_byte);
-    }
-
-    for (int i = 0; i < n_blobettes; ++i) {
-        blobette_t b = blobettes[i];
-        printf("%06lo %5lu %s\n", (unsigned long)b.file_mode, b.content_length,
-               "NotImplemented");
-    }
-
-    free(blobettes);
-    fclose(blob_stream);
-
-    // END: Draft
+    unpack_blob(blob_pathname, 0);
 }
 
 /**
