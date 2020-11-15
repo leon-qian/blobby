@@ -174,7 +174,7 @@ void unpack_blob(char *blob_pathname, int depth) {
         }
 
         // get pathname bytes
-        uint8_t *pathname = malloc(sizeof(uint8_t) * (pathname_length + 1));
+        char *pathname = malloc(sizeof(char) * (pathname_length + 1));
         for (int i = 0; i < pathname_length; ++i) {
             if (process_next_byte(blob_stream, &byte, &hash)) {
                 free(pathname);
@@ -195,17 +195,37 @@ void unpack_blob(char *blob_pathname, int depth) {
                 exit(EXIT_FAILURE);
             }
         } else {
-            // create files and write contents
+            // create file and write content
+            printf("Extracting: %s\n", pathname);
+            FILE *file_stream = fopen(pathname, "w");
+
+            for (int i = 0; i < content_length; ++i) {
+                if (process_next_byte(blob_stream, &byte, &hash)) {
+                    fprintf(stderr, "ERROR: Incomplete content\n");
+                    exit(EXIT_FAILURE);
+                }
+
+                fputc(byte, file_stream);
+            }
+
+            // set file mode
+            if (chmod(pathname, mode)) {
+                perror(pathname);
+                exit(EXIT_FAILURE);
+            }
+
+            fclose(file_stream);
+            free(pathname);
 
             // get hash
             if (process_next_byte(blob_stream, &byte, NULL)) {
-                fprintf(stderr, "ERROR: Hash of blobette not found\n");
+                fprintf(stderr, "ERROR: blob hash not found\n");
                 exit(EXIT_FAILURE);
             }
 
             // check hash
             if (byte != hash) {
-                fprintf(stderr, "ERROR: Hash of blobette incorrect\n");
+                fprintf(stderr, "ERROR: blob hash incorrect\n");
                 exit(EXIT_FAILURE);
             }
         }
