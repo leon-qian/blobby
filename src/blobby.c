@@ -100,25 +100,23 @@ int process_next_byte(FILE *stream, uint8_t *byte, uint8_t *hash) {
 }
 
 /**
- * Pack an array of blobettes into a blob file.
- *
- * Return 0 on success,
- *        1 on failure.
+ * Pack a blob file.
  *
  * On failure, the blob file will contain all the packed blobettes up to the
- * point of failure. Note that this file will be an invalid blob file.
+ * point of failure. Note that this file will be an invalid blob file and will
+ * remain in the file system.
  */
-// int pack_blob(blobette_t *blobettes, int n_blobettes, char *blob_pathname) {}
+void pack_blob(char *blob_pathname, char *pathnames[]) {}
 
 /**
- * Unpack a blob file into an array of blobettes.
+ * Unpack a blob file.
  *
- * Return 0 on success,
- *        1 on failure.
+ * At depth 0, only the metadata of the blobettes will be displayed and there
+ * will be no side effects on failure.
  *
- * On failure, the array of blobettes will contain all the unpacked blobettes up
- * to the point of failure. Note that the last blobette in the array will be an
- * invalid blobette.
+ * At depth 1, the content of the blobettes will be written to files and there
+ * will be artefacts on failure, i.e any files that have already been written
+ * before the point of failure will remain in the file system.
  */
 void unpack_blob(char *blob_pathname, int depth) {
     // Open the blob.
@@ -337,7 +335,7 @@ action_t process_arguments(int argc, char *argv[], char **blob_pathname,
  * List the contents of the blob at the given path.
  * This function is called when the -l flag is set.
  *
- * blob_pathname : The path to the blob.
+ * blob_pathname    The path to the blob.
  */
 void list_blob(char *blob_pathname) {
     // Unpack blob at depth 0, i.e. without extracting the contents.
@@ -348,31 +346,36 @@ void list_blob(char *blob_pathname) {
  * Extract the contents of the blob at the given path.
  * This function is called when the -x flag is set.
  *
- * blob_pathname: The path to the blob.
+ * blob_pathname    The path to the blob.
  */
 void extract_blob(char *blob_pathname) {
     // Unpack blob at depth 1, i.e. actually extracting the contents.
     unpack_blob(blob_pathname, 1);
 }
 
-// create blob_pathname from NULL-terminated array pathnames
-// compress with xz if compress_blob non-zero (subset 4)
 /**
+ * Create a blob at the given path, containing the specified files.
  * This function is called when the -c flag is set.
+ *
+ * The blob file will be compressed using xz if compression is set.
  * This function compresses blob if -z flag is set.
  *
- * files -> array of blobettes
- * print each blobette name
- * blobettes -> blob
+ * blob_pathname    The path to the blob.
+ * pathnames        The specified files as a NULL-terminated array of pathnames.
+ * compress_blob    The compression flag: 0 off, non-0 on.
  */
 void create_blob(char *blob_pathname, char *pathnames[], int compress_blob) {
-    // REPLACE WITH YOUR CODE FOR -c
+    // printf("create_blob called to create %s blob '%s' containing:\n",
+    //        compress_blob ? "compressed" : "non-compressed", blob_pathname);
+    // for (int p = 0; pathnames[p]; p++) {
+    //     printf("%s\n", pathnames[p]);
+    // }
 
-    printf("create_blob called to create %s blob '%s' containing:\n",
-           compress_blob ? "compressed" : "non-compressed", blob_pathname);
+    // Pack blob.
+    pack_blob(blob_pathname, pathnames);
 
-    for (int p = 0; pathnames[p]; p++) {
-        printf("%s\n", pathnames[p]);
+    if (compress_blob) {
+        // run xz here
     }
 }
 
