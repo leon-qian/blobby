@@ -92,10 +92,18 @@ int read_byte(FILE *stream, uint8_t *byte, uint8_t *hash) {
     }
 
     *byte = temp;
-    // if (hash) printf("hash: %02x\n", *hash);
-    // printf("byte: %02x\n", *byte);
     if (hash) *hash = blobby_hash(*hash, *byte);
-    // if (hash) printf("\tblobby_hash: %02x\n\n", *hash);
+    return 0;
+}
+
+/**
+ * Write the next byte to the stream and update the hash.
+ *
+ * Return 0 on success.
+ */
+int write_byte(uint8_t byte, FILE *stream, uint8_t *hash) {
+    fputc(byte, stream);
+    if (hash) *hash = blobby_hash(*hash, byte);
     return 0;
 }
 
