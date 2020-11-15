@@ -116,8 +116,12 @@ int write_byte(uint8_t byte, FILE *stream, uint8_t *hash) {
  */
 void pack_blob(char *blob_pathname, char *pathnames[]) {
     FILE *blob_stream = fopen(blob_pathname, "w");
+
     char *pathname;
-    for (int i = 0; pathname = pathnames[i]; ++i) {
+    for (int i = 0; (pathname = pathnames[i]); ++i) {
+        uint8_t hash = BLOBETTE_HASH_INITIAL_VALUE;
+        printf("Adding: %s\n", pathname);
+
         struct stat file_stat;
         if (stat(pathname, &file_stat)) {
             perror(pathname);
@@ -125,36 +129,44 @@ void pack_blob(char *blob_pathname, char *pathnames[]) {
         }
 
         // put magic number
-        fputc(BLOBETTE_MAGIC_NUMBER, blob_stream);
+        write_byte(BLOBETTE_MAGIC_NUMBER, blob_stream, &hash);
 
         // put mode
         mode_t mode = file_stat.st_mode;
-        fputc(mode >> 16 & 0xFF, blob_stream);
-        fputc(mode >> 8 & 0xFF, blob_stream);
-        fputc(mode & 0xFF, blob_stream);
+        write_byte(mode >> 16 & 0xFF, blob_stream, &hash);
+        write_byte(mode >> 8 & 0xFF, blob_stream, &hash);
+        write_byte(mode & 0xFF, blob_stream, &hash);
 
         // put pathname length
         uint16_t pathname_length = strlen(pathname);
-        fputc(pathname_length >> 8 & 0xFF, blob_stream);
-        fputc(pathname_length & 0xFF, blob_stream);
+        write_byte(pathname_length >> 8 & 0xFF, blob_stream, &hash);
+        write_byte(pathname_length & 0xFF, blob_stream, &hash);
 
         // put content length
         uint64_t content_length = file_stat.st_size;
-        fputc(content_length >> 40 & 0xFF, blob_stream);
-        fputc(content_length >> 32 & 0xFF, blob_stream);
-        fputc(content_length >> 24 & 0xFF, blob_stream);
-        fputc(content_length >> 16 & 0xFF, blob_stream);
-        fputc(content_length >> 8 & 0xFF, blob_stream);
-        fputc(content_length & 0xFF, blob_stream);
+        write_byte(content_length >> 40 & 0xFF, blob_stream, &hash);
+        write_byte(content_length >> 32 & 0xFF, blob_stream, &hash);
+        write_byte(content_length >> 24 & 0xFF, blob_stream, &hash);
+        write_byte(content_length >> 16 & 0xFF, blob_stream, &hash);
+        write_byte(content_length >> 8 & 0xFF, blob_stream, &hash);
+        write_byte(content_length & 0xFF, blob_stream, &hash);
 
         // put pathname
         int ch;
-        for (int j = 0; ch = pathname[j]; ++j) fputc(ch, blob_stream);
+        for (int j = 0; (ch = pathname[j]); ++j)
+            write_byte(ch, blob_stream, &hash);
 
         // put content
         FILE *file_stream = fopen(pathname, "r");
-        while ((ch = fgetc(file_stream)) != EOF) fputc(ch, blob_stream);
+        while ((ch = fgetc(file_stream)) != EOF)
+            write_byte(ch, blob_stream, &hash);
+        fclose(file_stream);
+
+        // put hash
+        write_byte(hash, blob_stream, NULL);
     }
+
+    fclose(blob_stream);
 }
 
 /**
