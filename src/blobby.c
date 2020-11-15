@@ -85,7 +85,7 @@ uint8_t blobby_hash(uint8_t hash, uint8_t byte);
  *
  * Note: Reaching EOF is considered a failure.
  */
-int process_next_byte(FILE *stream, uint8_t *byte, uint8_t *hash) {
+int read_byte(FILE *stream, uint8_t *byte, uint8_t *hash) {
     int temp = fgetc(stream);
     if (temp == EOF) {
         return 1;
@@ -106,7 +106,48 @@ int process_next_byte(FILE *stream, uint8_t *byte, uint8_t *hash) {
  * point of failure. Note that this file will be an invalid blob file and will
  * remain in the file system.
  */
-void pack_blob(char *blob_pathname, char *pathnames[]) {}
+void pack_blob(char *blob_pathname, char *pathnames[]) {
+    FILE *blob_stream = fopen(blob_pathname, "w");
+    char *pathname;
+    for (int i = 0; pathname = pathnames[i]; ++i) {
+        struct stat file_stat;
+        if (stat(pathname, &file_stat)) {
+            perror(pathname);
+            exit(EXIT_FAILURE);
+        }
+
+        // put magic number
+        fputc(BLOBETTE_MAGIC_NUMBER, blob_stream);
+
+        // put mode
+        mode_t mode = file_stat.st_mode;
+        fputc(mode >> 16 & 0xFF, blob_stream);
+        fputc(mode >> 8 & 0xFF, blob_stream);
+        fputc(mode & 0xFF, blob_stream);
+
+        // put pathname length
+        uint16_t pathname_length = strlen(pathname);
+        fputc(pathname_length >> 8 & 0xFF, blob_stream);
+        fputc(pathname_length & 0xFF, blob_stream);
+
+        // put content length
+        uint64_t content_length = file_stat.st_size;
+        fputc(content_length >> 40 & 0xFF, blob_stream);
+        fputc(content_length >> 32 & 0xFF, blob_stream);
+        fputc(content_length >> 24 & 0xFF, blob_stream);
+        fputc(content_length >> 16 & 0xFF, blob_stream);
+        fputc(content_length >> 8 & 0xFF, blob_stream);
+        fputc(content_length & 0xFF, blob_stream);
+
+        // put pathname
+        int ch;
+        for (int j = 0; ch = pathname[j]; ++j) fputc(ch, blob_stream);
+
+        // put content
+        FILE *file_stream = fopen(pathname, "r");
+        while ((ch = fgetc(file_stream)) != EOF) fputc(ch, blob_stream);
+    }
+}
 
 /**
  * Unpack a blob file.
@@ -128,7 +169,7 @@ void unpack_blob(char *blob_pathname, int depth) {
 
     uint8_t hash = BLOBETTE_HASH_INITIAL_VALUE;
     uint8_t byte;
-    while (!process_next_byte(blob_stream, &byte, &hash)) {
+    while (!read_byte(blob_stream, &byte, &hash)) {
         // check magic number
         if (byte != BLOBETTE_MAGIC_NUMBER) {
             fprintf(stderr, "ERROR: Magic byte of blobette incorrect\n");
@@ -138,7 +179,7 @@ void unpack_blob(char *blob_pathname, int depth) {
         // get mode
         mode_t mode = 0;
         for (int i = 0; i < BLOBETTE_MODE_LENGTH_BYTES; ++i) {
-            if (process_next_byte(blob_stream, &byte, &hash)) {
+            if (read_byte(blob_stream, &byte, &hash)) {
                 fprintf(stderr, "ERROR: Incomplete mode\n");
                 exit(EXIT_FAILURE);
             }
@@ -150,7 +191,7 @@ void unpack_blob(char *blob_pathname, int depth) {
         // get pathname length
         uint16_t pathname_length = 0;
         for (int i = 0; i < BLOBETTE_PATHNAME_LENGTH_BYTES; ++i) {
-            if (process_next_byte(blob_stream, &byte, &hash)) {
+            if (read_byte(blob_stream, &byte, &hash)) {
                 fprintf(stderr, "ERROR: Incomplete pathname length\n");
                 exit(EXIT_FAILURE);
             }
@@ -162,7 +203,7 @@ void unpack_blob(char *blob_pathname, int depth) {
         // get content length
         uint64_t content_length = 0;
         for (int i = 0; i < BLOBETTE_CONTENT_LENGTH_BYTES; ++i) {
-            if (process_next_byte(blob_stream, &byte, &hash)) {
+            if (read_byte(blob_stream, &byte, &hash)) {
                 fprintf(stderr, "ERROR: Incomplete content length\n");
                 exit(EXIT_FAILURE);
             }
@@ -174,7 +215,7 @@ void unpack_blob(char *blob_pathname, int depth) {
         // get pathname bytes
         char *pathname = malloc(sizeof(char) * (pathname_length + 1));
         for (int i = 0; i < pathname_length; ++i) {
-            if (process_next_byte(blob_stream, &byte, &hash)) {
+            if (read_byte(blob_stream, &byte, &hash)) {
                 free(pathname);
                 fprintf(stderr, "ERROR: Incomplete pathname\n");
                 exit(EXIT_FAILURE);
@@ -198,7 +239,7 @@ void unpack_blob(char *blob_pathname, int depth) {
             FILE *file_stream = fopen(pathname, "w");
 
             for (int i = 0; i < content_length; ++i) {
-                if (process_next_byte(blob_stream, &byte, &hash)) {
+                if (read_byte(blob_stream, &byte, &hash)) {
                     fprintf(stderr, "ERROR: Incomplete content\n");
                     exit(EXIT_FAILURE);
                 }
@@ -216,7 +257,7 @@ void unpack_blob(char *blob_pathname, int depth) {
             free(pathname);
 
             // get hash
-            if (process_next_byte(blob_stream, &byte, NULL)) {
+            if (read_byte(blob_stream, &byte, NULL)) {
                 fprintf(stderr, "ERROR: blob hash not found\n");
                 exit(EXIT_FAILURE);
             }
