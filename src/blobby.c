@@ -325,17 +325,14 @@ void list_blob(char *blob_pathname) {
 }
 
 /**
- * extract the contents of blob_pathname
+ * Extract the contents of the blob at the given path.
  * This function is called when the -x flag is set.
  *
- * file -> array of blobettes
- * print each blobette name
- * blobette -> file
+ * blob_pathname: The path to the blob.
  */
 void extract_blob(char *blob_pathname) {
-    // REPLACE WITH YOUR CODE FOR -x
-
-    printf("extract_blob called to extract '%s'\n", blob_pathname);
+    // Unpack blob at depth 1, i.e. actually extracting the contents.
+    unpack_blob(blob_pathname, 1);
 }
 
 // create blob_pathname from NULL-terminated array pathnames
