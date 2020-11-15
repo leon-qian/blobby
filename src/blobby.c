@@ -254,27 +254,50 @@ void unpack_blob(char *blob_pathname, int depth) {
                 exit(EXIT_FAILURE);
             }
         } else {
-            // create file and write content
-            printf("Extracting: %s\n", pathname);
-            FILE *file_stream = fopen(pathname, "w");
+            if (S_ISDIR(mode)) {
+                struct stat dir_stat;
+                if (stat(pathname, &dir_stat)) {
+                    // create directory with correct mode
+                    printf("Creating directory: %s\n", pathname);
+                    if (mkdir(pathname, mode)) {
+                        perror(pathname);
+                        exit(EXIT_FAILURE);
+                    }
+                } else {
+                    if (S_ISDIR(dir_stat.st_mode)) {
+                        // set the file mode for directory
+                        if (chmod(pathname, mode)) {
+                            perror(pathname);
+                            exit(EXIT_FAILURE);
+                        }
+                    } else {
+                        fprintf(stderr, "Can't create directory; file exists");
+                        exit(EXIT_FAILURE);
+                    }
+                }
+            } else {
+                // create file and write content
+                printf("Extracting: %s\n", pathname);
+                FILE *file_stream = fopen(pathname, "w");
 
-            for (int i = 0; i < content_length; ++i) {
-                if (read_byte(blob_stream, &byte, &hash)) {
-                    fprintf(stderr, "ERROR: Incomplete content\n");
+                for (int i = 0; i < content_length; ++i) {
+                    if (read_byte(blob_stream, &byte, &hash)) {
+                        fprintf(stderr, "ERROR: Incomplete content\n");
+                        exit(EXIT_FAILURE);
+                    }
+
+                    fputc(byte, file_stream);
+                }
+
+                // set file mode
+                if (chmod(pathname, mode)) {
+                    perror(pathname);
                     exit(EXIT_FAILURE);
                 }
 
-                fputc(byte, file_stream);
+                fclose(file_stream);
+                free(pathname);
             }
-
-            // set file mode
-            if (chmod(pathname, mode)) {
-                perror(pathname);
-                exit(EXIT_FAILURE);
-            }
-
-            fclose(file_stream);
-            free(pathname);
 
             // get hash
             if (read_byte(blob_stream, &byte, NULL)) {
