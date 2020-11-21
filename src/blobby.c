@@ -114,7 +114,7 @@ int write_byte(uint8_t byte, FILE *stream, uint8_t *hash) {
  * If file is dir, then call read_file on each file in dir.
  * If file is reg, then read the file into the blob.
  */
-void read_file(char *pathname, FILE *blob_stream) {
+void read_file(char *pathname, FILE *blob_stream, int recursive) {
     uint8_t hash = BLOBETTE_HASH_INITIAL_VALUE;
     printf("Adding: %s\n", pathname);
 
@@ -160,17 +160,48 @@ void read_file(char *pathname, FILE *blob_stream) {
     write_byte(hash, blob_stream, NULL);
 
     // include everything inside dirs
-    if (S_ISDIR(mode)) {
-        DIR *dirp = opendir(pathname);
-        if (!dirp) {
+    if (recursive && S_ISDIR(mode)) {
+        // DIR *dirp = opendir(pathname);
+        // if (!dirp) {
+        //     perror(pathname);
+        //     exit(EXIT_FAILURE);
+        // }
+
+        struct dirent **dirents;
+        int n = scandir(pathname, &dirents, NULL, alphasort);
+        if (n < 0) {
             perror(pathname);
             exit(EXIT_FAILURE);
+        } else {
+            for (int i = 0; i < n; ++i) {
+                char *dir_name = dirents[i]->d_name;
+                if (!strcmp(dir_name, ".")) continue;
+                if (!strcmp(dir_name, "..")) continue;
+                char *new_path = strdup(pathname);
+                new_path = realloc(new_path, BLOBETTE_MAX_PATHNAME_LENGTH);
+                if (new_path[strlen(new_path) - 1] != '/')
+                    new_path = strcat(new_path, "/");
+                new_path = strcat(new_path, dir_name);
+                read_file(new_path, blob_stream, 1);
+                free(new_path);
+            }
         }
 
-        struct dirent *de;
-        while ((de = readdir(dirp))) read_file(de->d_name, blob_stream);
+        // struct dirent *de;
+        // while ((de = readdir(dirp))) {
+        //     char *dir_name = de->d_name;
+        //     if (!strcmp(dir_name, ".")) continue;
+        //     if (!strcmp(dir_name, "..")) continue;
+        //     char *new_path = strdup(pathname);
+        //     new_path = realloc(new_path, BLOBETTE_MAX_PATHNAME_LENGTH);
+        //     if (new_path[strlen(new_path) - 1] != '/')
+        //         new_path = strcat(new_path, "/");
+        //     new_path = strcat(new_path, dir_name);
+        //     read_file(new_path, blob_stream, 1);
+        //     free(new_path);
+        // }
 
-        closedir(dirp);
+        // closedir(dirp);
     }
 }
 
@@ -190,10 +221,10 @@ void pack_blob(char *blob_pathname, char *pathnames[]) {
         while ((sep_ptr = strchr(++sep_ptr, '/'))) {
             if (strlen(sep_ptr) == 1) break;
             *sep_ptr = '\0';
-            read_file(pathname, blob_stream);
+            read_file(pathname, blob_stream, 0);
             *sep_ptr = '/';
         }
-        read_file(pathname, blob_stream);
+        read_file(pathname, blob_stream, 1);
     }
 
     fclose(blob_stream);
