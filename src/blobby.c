@@ -139,7 +139,7 @@ void read_file(char *pathname, FILE *blob_stream, int recursive) {
     write_byte(pathname_length & 0xFF, blob_stream, &hash);
 
     // put content length
-    uint64_t content_length = file_stat.st_size;
+    uint64_t content_length = S_ISDIR(mode) ? 0 : file_stat.st_size;
     write_byte(content_length >> 40 & 0xFF, blob_stream, &hash);
     write_byte(content_length >> 32 & 0xFF, blob_stream, &hash);
     write_byte(content_length >> 24 & 0xFF, blob_stream, &hash);
