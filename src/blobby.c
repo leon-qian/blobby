@@ -4,6 +4,8 @@
 // Written by <LEON QIAN>
 
 #include <assert.h>
+#include <dirent.h>
+#include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -108,6 +110,57 @@ int write_byte(uint8_t byte, FILE *stream, uint8_t *hash) {
 }
 
 /**
+ * Read a file into a blob recursively.
+ * If file is dir, then call read_file on each file in dir.
+ * If file is reg, then read the file into the blob.
+ */
+void read_file(char *pathname, FILE *blob_stream) {
+    uint8_t hash = BLOBETTE_HASH_INITIAL_VALUE;
+    printf("Adding: %s\n", pathname);
+
+    struct stat file_stat;
+    if (stat(pathname, &file_stat)) {
+        perror(pathname);
+        exit(EXIT_FAILURE);
+    }
+
+    // put magic number
+    write_byte(BLOBETTE_MAGIC_NUMBER, blob_stream, &hash);
+
+    // put mode
+    mode_t mode = file_stat.st_mode;
+    write_byte(mode >> 16 & 0xFF, blob_stream, &hash);
+    write_byte(mode >> 8 & 0xFF, blob_stream, &hash);
+    write_byte(mode & 0xFF, blob_stream, &hash);
+
+    // put pathname length
+    uint16_t pathname_length = strlen(pathname);
+    write_byte(pathname_length >> 8 & 0xFF, blob_stream, &hash);
+    write_byte(pathname_length & 0xFF, blob_stream, &hash);
+
+    // put content length
+    uint64_t content_length = file_stat.st_size;
+    write_byte(content_length >> 40 & 0xFF, blob_stream, &hash);
+    write_byte(content_length >> 32 & 0xFF, blob_stream, &hash);
+    write_byte(content_length >> 24 & 0xFF, blob_stream, &hash);
+    write_byte(content_length >> 16 & 0xFF, blob_stream, &hash);
+    write_byte(content_length >> 8 & 0xFF, blob_stream, &hash);
+    write_byte(content_length & 0xFF, blob_stream, &hash);
+
+    // put pathname
+    int ch;
+    for (int j = 0; (ch = pathname[j]); ++j) write_byte(ch, blob_stream, &hash);
+
+    // put content
+    FILE *file_stream = fopen(pathname, "r");
+    while ((ch = fgetc(file_stream)) != EOF) write_byte(ch, blob_stream, &hash);
+    fclose(file_stream);
+
+    // put hash
+    write_byte(hash, blob_stream, NULL);
+}
+
+/**
  * Pack a blob file.
  *
  * On failure, the blob file will contain all the packed blobettes up to the
@@ -119,54 +172,74 @@ void pack_blob(char *blob_pathname, char *pathnames[]) {
 
     char *pathname;
     for (int i = 0; (pathname = pathnames[i]); ++i) {
-        uint8_t hash = BLOBETTE_HASH_INITIAL_VALUE;
-        printf("Adding: %s\n", pathname);
+        char *sep_ptr = pathname;
+        while ((sep_ptr = strchr(++sep_ptr, '/'))) {
+            *sep_ptr = '\0';
+            read_file(pathname, blob_stream);
+            *sep_ptr = '/';
+        }
+        read_file(pathname, blob_stream);
+    }
 
-        struct stat file_stat;
-        if (stat(pathname, &file_stat)) {
+    fclose(blob_stream);
+}
+
+/**
+ * Write out the file.
+ *
+ * If the file is a directory, then call write_file on each file inside.
+ */
+void write_file(mode_t mode, uint16_t pathname_length, uint64_t content_length,
+                char *pathname, FILE *blob_stream, uint8_t *byte,
+                uint8_t *hash) {
+    if (S_ISDIR(mode)) {
+        struct stat dir_stat;
+        if (stat(pathname, &dir_stat)) {
+            if (errno == ENOENT) {
+                // create directory with correct mode
+                printf("Creating directory: %s\n", pathname);
+                if (mkdir(pathname, mode)) {
+                    perror(pathname);
+                    exit(EXIT_FAILURE);
+                }
+            } else {
+                perror(pathname);
+                exit(EXIT_FAILURE);
+            }
+        } else {
+            if (S_ISDIR(dir_stat.st_mode)) {
+                // set the file mode for directory
+                if (chmod(pathname, mode)) {
+                    perror(pathname);
+                    exit(EXIT_FAILURE);
+                }
+            } else {
+                fprintf(stderr, "Can't create directory; file exists");
+                exit(EXIT_FAILURE);
+            }
+        }
+    } else {
+        // create file and write content
+        printf("Extracting: %s\n", pathname);
+        FILE *file_stream = fopen(pathname, "w");
+
+        for (int i = 0; i < content_length; ++i) {
+            if (read_byte(blob_stream, byte, hash)) {
+                fprintf(stderr, "ERROR: Incomplete content\n");
+                exit(EXIT_FAILURE);
+            }
+
+            fputc(*byte, file_stream);
+        }
+
+        // set file mode
+        if (chmod(pathname, mode)) {
             perror(pathname);
             exit(EXIT_FAILURE);
         }
 
-        // put magic number
-        write_byte(BLOBETTE_MAGIC_NUMBER, blob_stream, &hash);
-
-        // put mode
-        mode_t mode = file_stat.st_mode;
-        write_byte(mode >> 16 & 0xFF, blob_stream, &hash);
-        write_byte(mode >> 8 & 0xFF, blob_stream, &hash);
-        write_byte(mode & 0xFF, blob_stream, &hash);
-
-        // put pathname length
-        uint16_t pathname_length = strlen(pathname);
-        write_byte(pathname_length >> 8 & 0xFF, blob_stream, &hash);
-        write_byte(pathname_length & 0xFF, blob_stream, &hash);
-
-        // put content length
-        uint64_t content_length = file_stat.st_size;
-        write_byte(content_length >> 40 & 0xFF, blob_stream, &hash);
-        write_byte(content_length >> 32 & 0xFF, blob_stream, &hash);
-        write_byte(content_length >> 24 & 0xFF, blob_stream, &hash);
-        write_byte(content_length >> 16 & 0xFF, blob_stream, &hash);
-        write_byte(content_length >> 8 & 0xFF, blob_stream, &hash);
-        write_byte(content_length & 0xFF, blob_stream, &hash);
-
-        // put pathname
-        int ch;
-        for (int j = 0; (ch = pathname[j]); ++j)
-            write_byte(ch, blob_stream, &hash);
-
-        // put content
-        FILE *file_stream = fopen(pathname, "r");
-        while ((ch = fgetc(file_stream)) != EOF)
-            write_byte(ch, blob_stream, &hash);
         fclose(file_stream);
-
-        // put hash
-        write_byte(hash, blob_stream, NULL);
     }
-
-    fclose(blob_stream);
 }
 
 /**
@@ -254,50 +327,9 @@ void unpack_blob(char *blob_pathname, int depth) {
                 exit(EXIT_FAILURE);
             }
         } else {
-            if (S_ISDIR(mode)) {
-                struct stat dir_stat;
-                if (stat(pathname, &dir_stat)) {
-                    // create directory with correct mode
-                    printf("Creating directory: %s\n", pathname);
-                    if (mkdir(pathname, mode)) {
-                        perror(pathname);
-                        exit(EXIT_FAILURE);
-                    }
-                } else {
-                    if (S_ISDIR(dir_stat.st_mode)) {
-                        // set the file mode for directory
-                        if (chmod(pathname, mode)) {
-                            perror(pathname);
-                            exit(EXIT_FAILURE);
-                        }
-                    } else {
-                        fprintf(stderr, "Can't create directory; file exists");
-                        exit(EXIT_FAILURE);
-                    }
-                }
-            } else {
-                // create file and write content
-                printf("Extracting: %s\n", pathname);
-                FILE *file_stream = fopen(pathname, "w");
-
-                for (int i = 0; i < content_length; ++i) {
-                    if (read_byte(blob_stream, &byte, &hash)) {
-                        fprintf(stderr, "ERROR: Incomplete content\n");
-                        exit(EXIT_FAILURE);
-                    }
-
-                    fputc(byte, file_stream);
-                }
-
-                // set file mode
-                if (chmod(pathname, mode)) {
-                    perror(pathname);
-                    exit(EXIT_FAILURE);
-                }
-
-                fclose(file_stream);
-                free(pathname);
-            }
+            write_file(mode, pathname_length, content_length, pathname,
+                       blob_stream, &byte, &hash);
+            free(pathname);
 
             // get hash
             if (read_byte(blob_stream, &byte, NULL)) {
