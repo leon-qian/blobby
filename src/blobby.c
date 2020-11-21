@@ -158,6 +158,20 @@ void read_file(char *pathname, FILE *blob_stream) {
 
     // put hash
     write_byte(hash, blob_stream, NULL);
+
+    // include everything inside dirs
+    if (S_ISDIR(mode)) {
+        DIR *dirp = opendir(pathname);
+        if (!dirp) {
+            perror(pathname);
+            exit(EXIT_FAILURE);
+        }
+
+        struct dirent *de;
+        while ((de = readdir(dirp))) read_file(de->d_name, blob_stream);
+
+        closedir(dirp);
+    }
 }
 
 /**
@@ -174,6 +188,7 @@ void pack_blob(char *blob_pathname, char *pathnames[]) {
     for (int i = 0; (pathname = pathnames[i]); ++i) {
         char *sep_ptr = pathname;
         while ((sep_ptr = strchr(++sep_ptr, '/'))) {
+            if (strlen(sep_ptr) == 1) break;
             *sep_ptr = '\0';
             read_file(pathname, blob_stream);
             *sep_ptr = '/';
