@@ -6,12 +6,14 @@
 #include <assert.h>
 #include <dirent.h>
 #include <errno.h>
+#include <spawn.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 // the first byte of every blobette has this value
@@ -534,10 +536,65 @@ void create_blob(char *blob_pathname, char *pathnames[], int compress_blob) {
     // }
 
     // Pack blob.
-    pack_blob(blob_pathname, pathnames);
+    // pack_blob(blob_pathname, pathnames);
 
     if (compress_blob) {
         // run xz here
+        printf("Running posix spawn etc...\n");
+
+        int pipe_file_descriptors[2];
+        if (pipe(pipe_file_descriptors) == -1) {
+            perror("pipe");
+            exit(EXIT_FAILURE);
+        }
+
+        posix_spawn_file_actions_t actions;
+        if (posix_spawn_file_actions_init(&actions)) {
+            perror("posix_spawn_file_actions_init");
+            exit(EXIT_FAILURE);
+        }
+
+        if (posix_spawn_file_actions_addclose(&actions,
+                                              pipe_file_descriptors[1])) {
+            perror("posix_spawn_file_actions_addclose");
+            exit(EXIT_FAILURE);
+        }
+
+        if (posix_spawn_file_actions_adddup2(&actions, pipe_file_descriptors[0],
+                                             0)) {
+            perror("posix_spawn_file_actions_adddup2");
+            exit(EXIT_FAILURE);
+        }
+
+        // char *spawn_argv[] = {"xz", blob_pathname, NULL};
+        char *spawn_argv[] = {"xxd", NULL};
+        pid_t pid;
+        extern char **environ;
+        if (posix_spawnp(&pid, "xxd", &actions, NULL, spawn_argv, environ)) {
+            perror("posix_spawnp");
+            exit(EXIT_FAILURE);
+        }
+
+        close(pipe_file_descriptors[0]);
+
+        FILE *f = fdopen(pipe_file_descriptors[1], "w");
+        if (!f) {
+            perror("fdopen");
+            exit(EXIT_FAILURE);
+        }
+
+        fprintf(f, "abc\n");
+
+        int exit_status;
+        if (waitpid(pid, &exit_status, 0) == -1) {
+            perror("waitpid");
+            exit(EXIT_FAILURE);
+        }
+        printf("exit status was %d\n", exit_status);
+
+        posix_spawn_file_actions_destroy(&actions);
+
+        // finished compressing ...
     }
 }
 
