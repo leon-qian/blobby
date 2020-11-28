@@ -214,9 +214,7 @@ void read_file(char *pathname, FILE *blob_stream, int recursive) {
  * point of failure. Note that this file will be an invalid blob file and will
  * remain in the file system.
  */
-void pack_blob(char *blob_pathname, char *pathnames[]) {
-    FILE *blob_stream = fopen(blob_pathname, "w");
-
+void pack_blob(FILE *blob_stream, char *pathnames[]) {
     char *pathname;
     for (int i = 0; (pathname = pathnames[i]); ++i) {
         char *sep_ptr = pathname;
@@ -228,8 +226,6 @@ void pack_blob(char *blob_pathname, char *pathnames[]) {
         }
         read_file(pathname, blob_stream, 1);
     }
-
-    fclose(blob_stream);
 }
 
 /**
@@ -517,6 +513,63 @@ void extract_blob(char *blob_pathname) {
     unpack_blob(blob_pathname, 1);
 }
 
+void create_compressed(char *blob_pathname, char *pathnames[]) {
+    int pipefd[2];
+    if (pipe(pipefd)) {
+        perror("pipe");
+        exit(EXIT_FAILURE);
+    }
+
+    posix_spawn_file_actions_t actions;
+    if (posix_spawn_file_actions_init(&actions)) {
+        perror("posix_spawn_file_actions_init");
+        exit(EXIT_FAILURE);
+    }
+
+    // close the unused write end of the pipe in the child process
+    // otherwise fd will remain open when we try close it in parent later
+    if (posix_spawn_file_actions_addclose(&actions, pipefd[1])) {
+        perror("posix_spawn_file_actions_addclose");
+        exit(EXIT_FAILURE);
+    }
+
+    // point stdin to whatever the read end of pipe is pointing at
+    // this means that the new process will try to read from the pipe
+    if (posix_spawn_file_actions_adddup2(&actions, pipefd[0], STDIN_FILENO)) {
+        perror("posix_spawn_file_actions_adddup2");
+        exit(EXIT_FAILURE);
+    }
+
+    extern char **environ;
+    char *argv[] = {"xz", "-z", blob_pathname, NULL};
+    pid_t pid;
+    if (posix_spawnp(&pid, "xz", &actions, NULL, argv, environ)) {
+        perror("posix_spawnp");
+        exit(EXIT_FAILURE);
+    }
+
+    close(pipefd[0]);
+
+    FILE *write_pipe = fdopen(pipefd[1], "w");
+    if (!write_pipe) {
+        perror("fdopen");
+        exit(EXIT_FAILURE);
+    }
+
+    pack_blob(write_pipe, pathnames);
+
+    // fprintf(write_pipe, "abc\n");
+    fclose(write_pipe);
+
+    int status;
+    if (waitpid(pid, &status, 0) == -1) {
+        perror("waitpid");
+        exit(EXIT_FAILURE);
+    }
+
+    posix_spawn_file_actions_destroy(&actions);
+}
+
 /**
  * Create a blob at the given path, containing the specified files.
  * This function is called when the -c flag is set.
@@ -535,66 +588,12 @@ void create_blob(char *blob_pathname, char *pathnames[], int compress_blob) {
     //     printf("%s\n", pathnames[p]);
     // }
 
-    // Pack blob.
-    // pack_blob(blob_pathname, pathnames);
-
     if (compress_blob) {
-        // run xz here
-        printf("Running posix spawn etc...\n");
-
-        int pipe_file_descriptors[2];
-        if (pipe(pipe_file_descriptors) == -1) {
-            perror("pipe");
-            exit(EXIT_FAILURE);
-        }
-
-        posix_spawn_file_actions_t actions;
-        if (posix_spawn_file_actions_init(&actions)) {
-            perror("posix_spawn_file_actions_init");
-            exit(EXIT_FAILURE);
-        }
-
-        if (posix_spawn_file_actions_addclose(&actions,
-                                              pipe_file_descriptors[1])) {
-            perror("posix_spawn_file_actions_addclose");
-            exit(EXIT_FAILURE);
-        }
-
-        if (posix_spawn_file_actions_adddup2(&actions, pipe_file_descriptors[0],
-                                             0)) {
-            perror("posix_spawn_file_actions_adddup2");
-            exit(EXIT_FAILURE);
-        }
-
-        // char *spawn_argv[] = {"xz", blob_pathname, NULL};
-        char *spawn_argv[] = {"xxd", NULL};
-        pid_t pid;
-        extern char **environ;
-        if (posix_spawnp(&pid, "xxd", &actions, NULL, spawn_argv, environ)) {
-            perror("posix_spawnp");
-            exit(EXIT_FAILURE);
-        }
-
-        close(pipe_file_descriptors[0]);
-
-        FILE *f = fdopen(pipe_file_descriptors[1], "w");
-        if (!f) {
-            perror("fdopen");
-            exit(EXIT_FAILURE);
-        }
-
-        fprintf(f, "abc\n");
-
-        int exit_status;
-        if (waitpid(pid, &exit_status, 0) == -1) {
-            perror("waitpid");
-            exit(EXIT_FAILURE);
-        }
-        printf("exit status was %d\n", exit_status);
-
-        posix_spawn_file_actions_destroy(&actions);
-
-        // finished compressing ...
+        create_compressed(blob_pathname, pathnames);
+    } else {
+        FILE *blob_stream = fopen(blob_pathname, "w");
+        // Pack blob.
+        pack_blob(blob_stream, pathnames);
     }
 }
 
